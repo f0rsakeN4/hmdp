@@ -13,11 +13,14 @@ import com.hmdp.utils.UserHolder;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
+import java.util.Collections;
 
 /**
  * <p>
@@ -40,6 +43,31 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Resource
     private RedissonClient redissonClient;
 
+    private static final DefaultRedisScript<Long> SECKILL_SCRIPT;
+    static {
+        SECKILL_SCRIPT = new DefaultRedisScript();
+        SECKILL_SCRIPT.setLocation(new ClassPathResource("seckill.lua"));
+        SECKILL_SCRIPT.setResultType(Long.class);
+    }
+
+    @Override
+    public Result seckillVoucher(Long voucherId) {
+        //1. 执行lua脚本
+        Long result = stringRedisTemplate.execute(SECKILL_SCRIPT,
+                Collections.emptyList(), voucherId.toString(),
+                UserHolder.getUser().getId().toString());
+        //2. 判断返回值，并返回错误信息
+        if (result.intValue() != 0) {
+            return Result.fail(result.intValue() == 1 ? "库存不足" : "不能重复下单");
+        }
+        long orderId = redisIdWorker.nextId("order");
+        //TODO 保存阻塞队列
+
+        //3. 返回订单id
+        return Result.ok(orderId);
+    }
+
+    /*
     @Override
     public Result seckillVoucher(Long voucherId) {
         // 1.查询优惠券
@@ -81,6 +109,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             redisLock.unlock();
         }
     }
+     */
 
     @Override
     public Result createVoucherOrder(Long voucherId) {
