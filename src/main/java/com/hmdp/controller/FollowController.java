@@ -31,5 +31,7 @@ public class FollowController {
     public Result follow(@PathVariable("id") Long followUserId, @PathVariable("isFollow") Boolean isFollow) {
         return followService.follow(followUserId, isFollow);
     }
+
+
 }
 
