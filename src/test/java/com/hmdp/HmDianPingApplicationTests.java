@@ -1,6 +1,7 @@
 package com.hmdp;
 
 import com.hmdp.entity.Shop;
+import com.hmdp.service.IShopService;
 import com.hmdp.service.impl.ShopServiceImpl;
 import com.hmdp.utils.RedisIdWorker;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,12 @@ class HmDianPingApplicationTests {
     @Autowired
     private RedisIdWorker redisIdWorker;
 
+    @Autowired
+    private IShopService shopService;
+
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
     private final ExecutorService es = Executors.newFixedThreadPool(500);
 
     @Test
@@ -53,5 +60,23 @@ class HmDianPingApplicationTests {
         latch.await();
         long end = System.currentTimeMillis();
         System.out.println("time = " + (end - begin));
+    }
+
+    @Test
+    public void loadShopData() {
+        List<Shop> shopList = shopService.list();
+        Map<Long, List<Shop>> map = shopList.stream().collect(Collectors.groupingBy(Shop::getTypeId));
+        for (Map.Entry<Long, List<Shop>> entry : map.entrySet()) {
+            Long typeId = entry.getKey();
+            List<Shop> shops = entry.getValue();
+            String key = SHOP_GEO_KEY + typeId;
+            List<RedisGeoCommands.GeoLocation<String>> locations = new ArrayList<>(shops.size());
+            for (Shop shop : shops) {
+                // 将当前type的商铺都添加到locations集合中
+                locations.add(new RedisGeoCommands.GeoLocation<>(shop.getId().toString(), new Point(shop.getX(), shop.getY())));
+            }
+            // 批量写入
+            stringRedisTemplate.opsForGeo().add(key, locations);
+        }
     }
 }
